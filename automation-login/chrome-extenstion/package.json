@@ -1,0 +1,11 @@
+{
+  "name": "rocket-uk-token-capture",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local sink server for the Rocket UK extension that captures aws-waf-token.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "server": "node server.js"
+  }
+}

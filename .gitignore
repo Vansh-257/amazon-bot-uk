@@ -1,0 +1,55 @@
+# ── Dependencies ──────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Secrets / credentials ─────────────────────────────────────
+.env
+.env.*
+!.env.example
+db/user.json
+db/*.json
+!db/user.example.json
+
+# ── Per-module runtime data dumps ─────────────────────────────
+Job_api/data/
+Schedule_api/data/
+fetch-job/data/
+create-application/data/
+api-db/data/
+
+# ── Chrome user-data / profile dirs ───────────────────────────
+chrome-profile/
+**/chrome-profile/
+chrome-profile-*/
+**/chrome-profile-*/
+
+# ── Logs ──────────────────────────────────────────────────────
+Job_api/logs/
+Schedule_api/logs/
+automation-login/logs/
+create-application/logs/
+fetch-otp/logs/
+api-db/logs/
+logs/
+*.log
+
+# ── OS / editor noise ─────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Build / temp ──────────────────────────────────────────────
+dist/
+build/
+coverage/
+.tmp/
+tmp/
+*.tsbuildinfo

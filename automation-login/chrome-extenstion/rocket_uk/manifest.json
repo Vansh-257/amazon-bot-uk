@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "Rocket UK - Token Capture",
+  "version": "1.0.0",
+  "description": "Captures aws-waf-token from auth.hiring.amazon.com (network + cookies)",
+  "permissions": [
+    "cookies",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://auth.hiring.amazon.com/*",
+    "https://*.awswaf.com/*",
+    "http://localhost:3010/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://auth.hiring.amazon.com/*",
+        "https://*.awswaf.com/*"
+      ],
+      "js": ["injected.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://auth.hiring.amazon.com/*",
+        "https://*.awswaf.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_title": "Rocket UK - Token Capture"
+  }
+}
