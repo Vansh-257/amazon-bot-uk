@@ -69,9 +69,57 @@ function saveUsers(users) {
 const inflightUsers = new Set();
 
 function eligibleUsers(users) {
+    // Allow both negative ids (priority users with preferences) and positive
+    // ids (fallback users without preferences). Skip 0 / missing ids.
     return users.filter((u) =>
-        u && u.is_active === true && u.token && u.id > 0 && !inflightUsers.has(u.email)
+        u && u.is_active === true && u.token
+        && typeof u.id === 'number' && u.id !== 0
+        && !inflightUsers.has(u.email)
     );
+}
+
+// ── Preference matching ──────────────────────────────────────────
+// Map a schedule's raw fields onto the user-preference vocabulary so the two
+// sides can be compared directly.
+
+function scheduleJobType(sc) {
+    return (sc && sc.hoursPerWeek >= 30) ? 'full_time' : 'part_time';
+}
+
+function scheduleShiftType(sc) {
+    const code = sc && sc.trainingShiftCode;
+    if (!code) return null;
+    const first = String(code).charAt(0).toUpperCase();
+    if (first === 'D') return 'day';
+    if (first === 'N') return 'night';
+    return null;
+}
+
+// Each preference is treated as an optional filter: if the user has set it,
+// the schedule must satisfy it; if the user hasn't set it (missing/empty),
+// that dimension is not enforced. Returns { ok: bool, reason?: string }.
+function matchPreferences(user, sc) {
+    if (Array.isArray(user.location) && user.location.length > 0) {
+        if (!sc.city || !user.location.includes(sc.city)) {
+            return { ok: false, reason: `location ${sc.city || '∅'} not in ${JSON.stringify(user.location)}` };
+        }
+    }
+
+    if (Array.isArray(user.job_type) && user.job_type.length > 0) {
+        const t = scheduleJobType(sc);
+        if (!user.job_type.includes(t)) {
+            return { ok: false, reason: `job_type ${t} (hpw=${sc.hoursPerWeek}) not in ${JSON.stringify(user.job_type)}` };
+        }
+    }
+
+    if (user.shift_type) {
+        const s = scheduleShiftType(sc);
+        if (s !== user.shift_type) {
+            return { ok: false, reason: `shift_type ${s ?? '∅'} (code=${sc.trainingShiftCode}) ≠ ${user.shift_type}` };
+        }
+    }
+
+    return { ok: true };
 }
 
 function applyResultToUser(email, applicationId, candidateId, scheduleId) {
@@ -165,30 +213,67 @@ async function processSchedules(jobId, scheduleCards) {
         return;
     }
 
-    // Pick eligible users (active, with token, id>0, not currently in flight).
-    const users = eligibleUsers(loadUsers());
+    // Pick eligible users (active, with token, id != 0, not currently in flight).
+    // Sort ascending by id so negative-id users (operators with preferences) come
+    // first; positive-id fallback users come after. The pairing loop below picks
+    // the first user whose preferences match this schedule, so id<0 gets first
+    // shot and id>0 acts as a wildcard fallback.
+    const users = eligibleUsers(loadUsers()).sort((a, b) => a.id - b.id);
     if (users.length === 0) {
         logger.info(`[create-app] jobId=${jobId} no eligible users available`);
         return;
     }
 
-    // Pair top schedules with users 1:1.
-    const N = Math.min(fresh.length, users.length);
-    logger.info(`[create-app] jobId=${jobId} pairing ${N} (eligible-users=${users.length}, fresh-schedules=${fresh.length})`);
+    const priorityCount = users.filter((u) => u.id < 0).length;
+    logger.info(
+        `[create-app] jobId=${jobId} pairing ` +
+        `(eligible-users=${users.length} [${priorityCount} priority + ${users.length - priorityCount} fallback], ` +
+        `fresh-schedules=${fresh.length})`
+    );
 
     const pairs = [];
-    for (let i = 0; i < N; i++) {
-        const sc = fresh[i];
+    const availableUsers = [...users];
+
+    for (const sc of fresh) {
+        if (availableUsers.length === 0) break;
+
+        let matchedIdx = -1;
+        const reasons = [];
+        for (let i = 0; i < availableUsers.length; i++) {
+            const r = matchPreferences(availableUsers[i], sc);
+            if (r.ok) { matchedIdx = i; break; }
+            reasons.push(`${availableUsers[i].email}: ${r.reason}`);
+        }
+
+        if (matchedIdx === -1) {
+            logger.info(
+                `[create-app]   skip ${sc.scheduleId} — no preference match ` +
+                `(city=${sc.city}, hpw=${sc.hoursPerWeek}, shift=${sc.trainingShiftCode}); ` +
+                `tried: ${reasons.join(' | ')}`
+            );
+            continue;
+        }
+
+        const user = availableUsers.splice(matchedIdx, 1)[0];
         consumedScheduleIds.add(sc.scheduleId);   // mark consumed at pair time
-        pairs.push({ user: users[i], scheduleId: sc.scheduleId });
-        logger.info(`[create-app]   pair: ${users[i].email} ↔ ${sc.scheduleId} (laborDemandAvailableCount=${sc.laborDemandAvailableCount || 0})`);
+        pairs.push({ user, scheduleId: sc.scheduleId });
+        logger.info(
+            `[create-app]   pair: ${user.email} ↔ ${sc.scheduleId} ` +
+            `(city=${sc.city}, hpw=${sc.hoursPerWeek}, shift=${sc.trainingShiftCode}, ` +
+            `laborDemandAvailableCount=${sc.laborDemandAvailableCount || 0})`
+        );
+    }
+
+    if (pairs.length === 0) {
+        logger.info(`[create-app] jobId=${jobId} no preference-matching pairs — skipping`);
+        return;
     }
 
     const startedAt = Date.now();
     const results = await Promise.allSettled(pairs.map((p) => applyOne(p.user, jobId, p.scheduleId)));
     const fulfilled = results.filter((r) => r.status === 'fulfilled').length;
     const rejected  = results.length - fulfilled;
-    logger.info(`[create-app] jobId=${jobId} parallel batch done in ${Date.now() - startedAt}ms — ${fulfilled}/${N} fulfilled, ${rejected} rejected`);
+    logger.info(`[create-app] jobId=${jobId} parallel batch done in ${Date.now() - startedAt}ms — ${fulfilled}/${pairs.length} fulfilled, ${rejected} rejected`);
 }
 
 module.exports = { processSchedules };
