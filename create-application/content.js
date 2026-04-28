@@ -161,7 +161,25 @@ async function applyOne(user, jobId, scheduleId, sc) {
             logger.error(`[${tag}] update-application FAILED after retries: status=${updated.status} ${updated.error}`);
             return;
         }
-        logger.info(`[${tag}] update-application ok`);
+        logger.info(`[${tag}] update-application ok | response: ${updated.raw}`);
+
+        try {
+            sendTelegramMessage(
+                `🔄 <b>Update-Application Successfully</b>\n\n` +
+                `📧 <b>Email:</b> ${user.email}\n` +
+                `🆔 <b>Job:</b> ${jobId}\n` +
+                `📅 <b>Schedule:</b> ${scheduleId}\n` +
+                `🪪 <b>appId:</b> ${applicationId}\n` +
+                `🏙 <b>City:</b> ${sc?.city ?? 'N/A'}\n` +
+                `⏱ <b>Hours/Week:</b> ${sc?.hoursPerWeek ?? 'N/A'}\n` +
+                `💼 <b>Schedule Type:</b> ${sc?.scheduleType ?? 'N/A'}\n` +
+                `📆 <b>Schedule:</b> ${sc?.scheduleText ?? 'N/A'}\n` +
+                `🕐 <b>Time:</b> ${new Date().toISOString()}`,
+                CHANNEL_ID_UK_JOB_CONFIRMED
+            );
+        } catch (e) {
+            logger.warn(`[${tag}] telegram error (update-application): ${e.message}`);
+        }
 
         // 3. WebSocket — close on assessment-consent
         logger.info(`[${tag}] websocket starting`);
