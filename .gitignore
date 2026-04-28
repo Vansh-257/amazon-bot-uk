@@ -53,3 +53,5 @@ coverage/
 .tmp/
 tmp/
 *.tsbuildinfo
+
+update-application/*.json

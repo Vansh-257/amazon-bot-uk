@@ -4,7 +4,7 @@ const logger = require('./logger.js');
 
 const URL = 'https://www.jobsatamazon.co.uk/application/api/candidate-application/update-application';
 
-const MAX_RETRIES = 20;
+const MAX_RETRIES = 10;
 
 function buildHeaders(accessToken, jobId, scheduleId) {
     return {
@@ -57,10 +57,16 @@ async function updateApplication(accessToken, applicationId, jobId, scheduleId) 
 
         const r = await updateApplicationOnce(accessToken, applicationId, jobId, scheduleId, agent);
         if (r.status === 200) {
-            logger.info(`[update-app] ${applicationId} OK on attempt ${attempt}/${MAX_RETRIES} (proxy: ${proxyInfo})`);
-            return { ok: true, raw: r.text };
+            let parsed;
+            try { parsed = JSON.parse(r.text); } catch (_) { parsed = null; }
+            if (parsed?.data?.applicationId) {
+                logger.info(`[update-app] ${applicationId} OK on attempt ${attempt}/${MAX_RETRIES} (proxy: ${proxyInfo})`);
+                return { ok: true, raw: r.text };
+            }
+            logger.warn(`[update-app] ${applicationId} attempt ${attempt}/${MAX_RETRIES} status=200 but no data.applicationId (proxy: ${proxyInfo}) ${r.text.slice(0, 150)}`);
+        } else {
+            logger.warn(`[update-app] ${applicationId} attempt ${attempt}/${MAX_RETRIES} status=${r.status} (proxy: ${proxyInfo}) ${r.text.slice(0, 150)}`);
         }
-        logger.warn(`[update-app] ${applicationId} attempt ${attempt}/${MAX_RETRIES} status=${r.status} (proxy: ${proxyInfo}) ${r.text.slice(0, 150)}`);
         last = r;
     }
     return { ok: false, status: last?.status, error: (last?.text || '').slice(0, 300) };
