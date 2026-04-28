@@ -21,6 +21,9 @@ const fs      = require('fs');
 const path    = require('path');
 const https   = require('https');
 
+const { getOtpFromHostinger } = require('../fetch-otp/hostingerOtp.js');
+const { getOtpFromGmail }     = require('../fetch-otp/gmailOtp.js');
+
 const app  = express();
 const PORT = process.env.API_DB_PORT || 3011;
 
@@ -171,6 +174,40 @@ app.post('/api/fetch-schedule-uk', async (req, res) => {
     } catch (error) {
         console.error('Error in /api/fetch-schedule-uk:', error);
         return res.status(500).json({ success: false, error: `Internal server error: ${error.message}` });
+    }
+});
+
+// POST /api/fetch-otp — body: { "email": "user@jgemaill.fun" }
+app.post('/api/fetch-otp', async (req, res) => {
+    try {
+        const { email } = req.body || {};
+        if (!email) {
+            return res.status(400).json({ success: false, error: 'email is required' });
+        }
+
+        const domain = email.split('@')[1]?.toLowerCase();
+
+        if (domain === 'jgemaill.fun') {
+            const otp = await getOtpFromHostinger(email);
+            if (!otp) return res.status(404).json({ success: false, error: 'OTP not found' });
+            return res.json({ success: true, otp });
+        }
+
+        if (domain === 'gmail.com') {
+            const users   = JSON.parse(fs.readFileSync(USER_JSON_PATH, 'utf8'));
+            const dbUser  = users.find((u) => u.email === email);
+            if (!dbUser?.passkey) {
+                return res.status(404).json({ success: false, error: `No passkey found for ${email} in db/user.json` });
+            }
+            const otp = await getOtpFromGmail(email, dbUser.passkey);
+            if (!otp) return res.status(404).json({ success: false, error: 'OTP not found' });
+            return res.json({ success: true, otp });
+        }
+
+        return res.status(400).json({ success: false, error: `Unsupported email domain: ${domain}` });
+    } catch (error) {
+        console.error('Error in /api/fetch-otp:', error);
+        return res.status(500).json({ success: false, error: error.message });
     }
 });
 
