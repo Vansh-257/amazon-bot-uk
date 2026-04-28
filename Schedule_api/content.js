@@ -46,7 +46,9 @@ setInterval(() => {
 }, 60 * 1000).unref();
 
 function saveResponseFile(apiResponse, jobId) {
-    const id = `${Date.now()}-${crypto.randomUUID()}`;
+    const now = new Date();
+    const pad = (n, len = 2) => String(n).padStart(len, '0');
+    const id = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}-${pad(now.getMilliseconds(), 3)}`;
     const filePath = path.join(dataDir, `${id}.json`);
     fs.writeFile(filePath, JSON.stringify(apiResponse, null, 2), 'utf8', (err) => {
         if (err) {
