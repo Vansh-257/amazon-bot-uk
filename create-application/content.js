@@ -136,7 +136,7 @@ function applyResultToUser(email, applicationId, candidateId, scheduleId) {
 }
 
 // ── Per-pair pipeline ────────────────────────────────────────────
-async function applyOne(user, jobId, scheduleId) {
+async function applyOne(user, jobId, scheduleId, sc) {
     const tag = `${user.email}/${jobId}/${scheduleId}`;
     inflightUsers.add(user.email);
 
@@ -185,6 +185,10 @@ async function applyOne(user, jobId, scheduleId) {
                 `🆔 <b>Job:</b> ${jobId}\n` +
                 `📅 <b>Schedule:</b> ${scheduleId}\n` +
                 `🪪 <b>appId:</b> ${applicationId}\n` +
+                `🏙 <b>City:</b> ${sc?.city ?? 'N/A'}\n` +
+                `⏱ <b>Hours/Week:</b> ${sc?.hoursPerWeek ?? 'N/A'}\n` +
+                `💼 <b>Schedule Type:</b> ${sc?.scheduleType ?? 'N/A'}\n` +
+                `📆 <b>Schedule:</b> ${sc?.scheduleText ?? 'N/A'}\n` +
                 `🕐 <b>Time:</b> ${new Date().toISOString()}`,
                 CHANNEL_ID_UK_JOB_CONFIRMED
             );
@@ -256,7 +260,7 @@ async function processSchedules(jobId, scheduleCards) {
 
         const user = availableUsers.splice(matchedIdx, 1)[0];
         consumedScheduleIds.add(sc.scheduleId);   // mark consumed at pair time
-        pairs.push({ user, scheduleId: sc.scheduleId });
+        pairs.push({ user, scheduleId: sc.scheduleId, sc });
         logger.info(
             `[create-app]   pair: ${user.email} ↔ ${sc.scheduleId} ` +
             `(city=${sc.city}, hpw=${sc.hoursPerWeek}, shift=${sc.trainingShiftCode}, ` +
@@ -270,7 +274,7 @@ async function processSchedules(jobId, scheduleCards) {
     }
 
     const startedAt = Date.now();
-    const results = await Promise.allSettled(pairs.map((p) => applyOne(p.user, jobId, p.scheduleId)));
+    const results = await Promise.allSettled(pairs.map((p) => applyOne(p.user, jobId, p.scheduleId, p.sc)));
     const fulfilled = results.filter((r) => r.status === 'fulfilled').length;
     const rejected  = results.length - fulfilled;
     logger.info(`[create-app] jobId=${jobId} parallel batch done in ${Date.now() - startedAt}ms — ${fulfilled}/${pairs.length} fulfilled, ${rejected} rejected`);
