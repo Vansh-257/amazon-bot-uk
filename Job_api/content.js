@@ -108,14 +108,20 @@ async function processAndSaveJobCards() {
     if (apiResult.success && apiResult.response) {
         const newJobCards = apiResult.response?.data?.searchJobCardsByLocation?.jobCards || [];
 
-        if (newJobCards.length > 0) {
+        // Only process jobs whose jobId starts with the expected UK prefix.
+        const validJobCards = newJobCards.filter((j) => j.jobId && j.jobId.startsWith('JOB-UK-'));
+        const skippedCount = newJobCards.length - validJobCards.length;
+        if (skippedCount > 0) {
+            logger.info(`⏭️  Skipped ${skippedCount} job(s) without 'JOB-UK-' prefix`);
+        }
+
+        if (validJobCards.length > 0) {
             // Filter to jobs we haven't notified about yet — Telegram should
             // only see unique jobIds even though Job_api polls in a loop.
-            const unseen = newJobCards.filter((j) => j.jobId && !notifiedJobIds.has(j.jobId));
+            const unseen = validJobCards.filter((j) => !notifiedJobIds.has(j.jobId));
             const dupeCount = newJobCards.length - unseen.length;
 
-            logger.info(`➕ Got ${newJobCards.length} jobCards — ${unseen.length} new, ${dupeCount} already notified`);
-            saveResponseFile(apiResult.response);
+            logger.info(`➕ Got ${validJobCards.length} valid jobCards — ${unseen.length} new, ${dupeCount} already notified`);
 
             if (unseen.length > 0) {
                 // Mark as notified up-front so the next poll's filter sees them
@@ -123,11 +129,13 @@ async function processAndSaveJobCards() {
                 unseen.forEach((j) => notifiedJobIds.add(j.jobId));
 
                 // Build a response copy whose jobCards array is just the unseen
-                // ones — same shape as the upstream payload, fewer entries.
+                // valid ones — same shape as the upstream payload, fewer entries.
                 const filteredResponse = JSON.parse(JSON.stringify(apiResult.response));
                 if (filteredResponse?.data?.searchJobCardsByLocation) {
                     filteredResponse.data.searchJobCardsByLocation.jobCards = unseen;
                 }
+
+                saveResponseFile(filteredResponse);
 
                 const apiText = JSON.stringify(filteredResponse, null, 2);
                 const chunkSize = 3500;
@@ -145,10 +153,12 @@ async function processAndSaveJobCards() {
 
             // Fire-and-forget: dispatch each jobId to the Schedule API.
             // Schedule_api dedupes 2 minutes per jobId so re-polls don't re-fire.
-            const jobIds = newJobCards.map((j) => j.jobId).filter(Boolean);
+            const jobIds = validJobCards.map((j) => j.jobId);
             processJobIds(jobIds).catch((err) => {
                 logger.error(`Schedule_api processJobIds failed: ${err.message}`);
             });
+        } else if (newJobCards.length > 0) {
+            logger.info('ℹ️  No valid job cards with JOB-UK- prefix in response');
         } else {
             logger.info('ℹ️  No job cards in response');
         }
