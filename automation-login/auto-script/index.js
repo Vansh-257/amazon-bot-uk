@@ -168,7 +168,11 @@ async function signIn(agent, csrfToken, wafToken, user) {
         err.status = res.status;
         throw err;
     }
-    return JSON.parse(text);
+    try {
+        return JSON.parse(text);
+    } catch {
+        throw new Error(`sign-in: invalid JSON response\n${text.slice(0, 300)}`);
+    }
 }
 
 async function confirmOtp(agent, csrfToken, wafToken, session, otp, user) {
@@ -197,7 +201,11 @@ async function confirmOtp(agent, csrfToken, wafToken, session, otp, user) {
         err.status = res.status;
         throw err;
     }
-    return JSON.parse(text);
+    try {
+        return JSON.parse(text);
+    } catch {
+        throw new Error(`confirm-otp: invalid JSON response\n${text.slice(0, 300)}`);
+    }
 }
 
 // Park the run until the pool has at least one token. Polls every
