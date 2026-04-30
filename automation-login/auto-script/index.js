@@ -21,6 +21,16 @@ const fs    = require('fs');
 const path  = require('path');
 const fetch = require('node-fetch');
 
+const { DynamoDBClient }        = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { SETTINGS }              = require('../../config/configuration.js');
+
+const _dynamoClient = new DynamoDBClient({
+    region:      SETTINGS.region,
+    credentials: { accessKeyId: SETTINGS.accessKeyId, secretAccessKey: SETTINGS.secretAccessKey },
+});
+const _dynamo = DynamoDBDocumentClient.from(_dynamoClient);
+
 const { proxyManager }       = require('./proxy-manager.js');
 const { peekToken, removeToken, poolSize } = require('./waf-token-pool.js');
 const { forUser }            = require('./logger.js');
@@ -80,7 +90,7 @@ function loadUser(email) {
     };
 }
 
-function updateUserTokenInDb(email, accessToken) {
+async function updateUserTokenInDb(email, accessToken) {
     const raw = fs.readFileSync(USER_DB_PATH, 'utf8');
     const rows = JSON.parse(raw);
     const needle = email.trim().toLowerCase();
@@ -92,6 +102,17 @@ function updateUserTokenInDb(email, accessToken) {
     rows[idx].updated_at     = rows[idx].last_active_at;
 
     fs.writeFileSync(USER_DB_PATH, JSON.stringify(rows, null, 2) + '\n', 'utf8');
+
+    await _dynamo.send(new UpdateCommand({
+        TableName: SETTINGS.dynamoTableName,
+        Key: { email: needle },
+        UpdateExpression: 'SET accessToken = :t, updated_at = :u',
+        ExpressionAttributeValues: {
+            ':t': accessToken,
+            ':u': rows[idx].updated_at,
+        },
+    }));
+
     return rows[idx].last_active_at;
 }
 
@@ -326,7 +347,7 @@ async function runLoginOnce(email, log) {
     if (!accessToken) throw new Error('No accessToken in confirm-otp response');
 
     log.step('save-db');
-    const ts = updateUserTokenInDb(user.email, accessToken);
+    const ts = await updateUserTokenInDb(user.email, accessToken);
     log.response('save-db', ts);
 
     // Fire-and-forget telegram ping on successful login — login channel.

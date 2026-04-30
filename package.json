@@ -7,6 +7,8 @@
     "start": "node Job_api/content.js"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1039.0",
+    "@aws-sdk/lib-dynamodb": "^3.1039.0",
     "cors": "^2.8.6",
     "express": "^4.22.1",
     "https-proxy-agent": "^7.0.5",
